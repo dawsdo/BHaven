@@ -1,10 +1,26 @@
 import { Link } from 'react-router-dom';
-import { TYPE_LABEL, ago, bedWord, isStale, takesText } from '../lib.js';
+import {
+  FRESHNESS_NOTE,
+  TYPE_LABEL,
+  UNCONFIRMED_REASON,
+  ago,
+  bedWord,
+  countText,
+  isStale,
+  takesText
+} from '../lib.js';
 
 export default function ListingCard({ host, reason, miles }) {
   const fits = !reason;
-  const stale = isStale(host.updated_at);
-  const line = [takesText(host), host.address];
+  const stale = isStale(host);
+  const known = host.beds_available != null;
+
+  // A confidential host has no address to show. Say why, so it reads as a policy
+  // rather than as missing data, and the phone number below becomes the way in.
+  const line = [takesText(host)];
+  if (host.address_confidential) line.push('Location confidential');
+  else if (host.address) line.push(host.address);
+  if (host.total_beds != null) line.push(host.total_beds + ' total beds');
   if (miles != null) line.push('about ' + miles.toFixed(1) + ' mi');
 
   return (
@@ -19,23 +35,30 @@ export default function ListingCard({ host, reason, miles }) {
           {host.pets && <span className="tag">Pets allowed</span>}
         </div>
         <div className="card-foot">
-          <div>
+          <div className="count-block">
             <div className="count">
-              <span className="count-num">{host.accepting ? host.beds_available : '–'}</span>
-              {host.accepting && <span>{bedWord(host.beds_available)} open</span>}
+              <span className="count-num">{host.accepting ? countText(host) : '–'}</span>
+              {host.accepting && known && <span>{bedWord(host.beds_available)} open</span>}
             </div>
             <div className={'reported' + (stale ? ' reported-stale' : '')}>
-              Reported {ago(host.updated_at)}
-              {stale ? ', may be out of date' : ''}
+              {stale ? FRESHNESS_NOTE[host.freshness] : 'Confirmed ' + ago(host.updated_at)}
             </div>
           </div>
-          {fits ? (
-            <Link className="btn btn-primary" to={'/place/' + host.id}>
-              View and hold
-            </Link>
-          ) : (
-            <span className="reason">{reason}</span>
-          )}
+          <div className="card-actions">
+            {fits ? (
+              <Link className="btn btn-primary" to={'/place/' + host.id}>
+                View and hold
+              </Link>
+            ) : reason === UNCONFIRMED_REASON ? null : (
+              // Otherwise the freshness note directly above already says this.
+              <span className="reason">{reason}</span>
+            )}
+            {host.phone && (
+              <a className="btn btn-call" href={'tel:' + host.phone.replace(/[^\d+]/g, '')}>
+                Call {host.phone}
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </article>

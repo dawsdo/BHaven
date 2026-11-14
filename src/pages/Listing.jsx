@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { TYPE_LABEL, ago, bedWord, isStale, takesText, usePolling } from '../lib.js';
+import { FRESHNESS_NOTE, TYPE_LABEL, ago, bedWord, isStale, takesText, usePolling } from '../lib.js';
 import Stepper from '../components/Stepper.jsx';
 
 const MINUTES = [15, 30, 45];
@@ -37,11 +37,16 @@ export default function Listing({ search, setSearch }) {
   if (!host) return <main className="page">Loading…</main>;
 
   const people = search.people;
-  const cantHold = host.beds_available < people;
-  const stale = isStale(host.updated_at);
-  const directions =
-    'https://www.google.com/maps/dir/?api=1&destination=' +
-    encodeURIComponent(host.name + ', ' + host.address + ', Birmingham, AL');
+  const known = host.beds_available != null;
+  // No count means no hold. Unknown is not availability.
+  const cantHold = !known || host.beds_available < people;
+  const stale = isStale(host);
+  // A confidential host gets no directions link. Building one from the name alone
+  // would still point a search engine at the shelter, so there is no link at all.
+  const directions = host.address_confidential
+    ? null
+    : 'https://www.google.com/maps/dir/?api=1&destination=' +
+      encodeURIComponent(host.name + ', ' + host.address + ', Birmingham, AL');
 
   async function placeHold() {
     setBusy(true);
@@ -85,25 +90,45 @@ export default function Listing({ search, setSearch }) {
           <div>
             <div className="eyebrow">{TYPE_LABEL[host.type]}</div>
             <h1>{host.name}</h1>
-            <p className="detail-addr">{host.address}, Birmingham</p>
+            {host.address_confidential ? (
+              <p className="detail-addr">
+                Location confidential. Call for directions and intake.
+              </p>
+            ) : (
+              <p className="detail-addr">{host.address}, Birmingham</p>
+            )}
+            {host.phone && (
+              <p className="detail-addr">
+                <a className="btn btn-primary" href={'tel:' + host.phone.replace(/[^\d+]/g, '')}>
+                  Call {host.phone}
+                </a>
+              </p>
+            )}
           </div>
           <dl className="facts">
             <dt>Takes</dt>
             <dd className="strong">{takesText(host)}</dd>
             <dt>Open now</dt>
             <dd className="strong">
-              {host.accepting
-                ? `${host.beds_available} ${bedWord(host.beds_available)}`
-                : 'Not taking arrivals tonight'}
+              {!host.accepting
+                ? 'Not taking arrivals tonight'
+                : known
+                  ? `${host.beds_available} ${bedWord(host.beds_available)}`
+                  : '— not reported'}
             </dd>
+            {host.total_beds != null && (
+              <>
+                <dt>Total beds</dt>
+                <dd>{host.total_beds}</dd>
+              </>
+            )}
             <dt>Good to know</dt>
             <dd>{tags.length ? tags.join(', ') : 'Nothing listed yet'}</dd>
             <dt>Arriving</dt>
             <dd>{host.note || 'Not set by the host yet'}</dd>
             <dt>Count reported</dt>
             <dd className={stale ? 'reported-stale' : ''}>
-              {ago(host.updated_at)}
-              {stale ? '. May be out of date, call ahead.' : ''}
+              {stale ? FRESHNESS_NOTE[host.freshness] : 'Confirmed ' + ago(host.updated_at)}
             </dd>
           </dl>
         </div>
@@ -118,9 +143,15 @@ export default function Listing({ search, setSearch }) {
                 {new Date(hold.expires_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
               </p>
               <p className="muted">Show this code at the door. The hold releases on its own if no one arrives.</p>
-              <a className="btn btn-primary btn-lg" href={directions} target="_blank" rel="noreferrer">
-                Get directions
-              </a>
+              {directions ? (
+                <a className="btn btn-primary btn-lg" href={directions} target="_blank" rel="noreferrer">
+                  Get directions
+                </a>
+              ) : (
+                <p className="muted">
+                  This location is confidential. Call {host.phone || 'the shelter'} for directions.
+                </p>
+              )}
               <button type="button" className="btn btn-outline" onClick={release} disabled={busy}>
                 Release hold
               </button>
@@ -160,7 +191,11 @@ export default function Listing({ search, setSearch }) {
                 onClick={placeHold}
                 disabled={cantHold || busy}
               >
-                {cantHold ? 'Not enough beds open' : `Hold ${people} ${bedWord(people)} for ${minutes} min`}
+                {!known
+                  ? 'No confirmed count — call first'
+                  : cantHold
+                    ? 'Not enough beds open'
+                    : `Hold ${people} ${bedWord(people)} for ${minutes} min`}
               </button>
               {problem && <div className="banner banner-warn">{problem}</div>}
               <p className="muted">
