@@ -1,4 +1,4 @@
-# ShelterLink BHM — project handoff
+# BHaven — project handoff
 
 State dump so a new teammate or session can pick this up cold. `README.md` is the
 public-facing writeup; this is the working context behind it.

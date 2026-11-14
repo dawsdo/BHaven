@@ -5,7 +5,7 @@ import { FRESHNESS_NOTE, TYPE_LABEL, ago, bedWord, isStale, takesText, usePollin
 import Stepper from '../components/Stepper.jsx';
 
 const MINUTES = [15, 30, 45];
-const holdKey = (id) => 'shelterlink-hold-' + id;
+const holdKey = (id) => 'bhaven-hold-' + id;
 
 function readHold(id) {
   try {

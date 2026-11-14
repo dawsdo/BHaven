@@ -1,4 +1,4 @@
-# ShelterLink BHM
+# BHaven
 
 A live view of which Birmingham shelters have beds open tonight, and a way to hold one.
 

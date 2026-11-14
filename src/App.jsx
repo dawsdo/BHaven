@@ -12,7 +12,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="wordmark">ShelterLink BHM</div>
+        <div className="wordmark">BHaven</div>
         <nav className="topnav" aria-label="Main">
           <NavLink to="/" end>
             Find a place
