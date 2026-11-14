@@ -1,6 +1,7 @@
-async function request(path, options) {
+// `token` is a signed-in staff member's session token, for the calls that need one.
+async function request(path, { token, ...options } = {}) {
   const res = await fetch('/api' + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(token && { Authorization: 'Bearer ' + token }) },
     ...options
   });
   const body = await res.json().catch(() => ({}));
@@ -14,12 +15,17 @@ async function request(path, options) {
 }
 
 export const api = {
-  hosts: (all = false) => request('/hosts' + (all ? '?all=1' : '')),
+  hosts: () => request('/hosts'),
   host: (id) => request('/hosts/' + id),
-  updateHost: (id, patch) => request('/hosts/' + id, { method: 'PATCH', body: JSON.stringify(patch) }),
-  hostHolds: (id) => request('/hosts/' + id + '/holds'),
-  createHold: (host_id, people, minutes) =>
-    request('/holds', { method: 'POST', body: JSON.stringify({ host_id, people, minutes }) }),
+  zip: (zip) => request('/zips/' + zip),
+  createHold: (host_id, count_id, people, minutes) =>
+    request('/holds', { method: 'POST', body: JSON.stringify({ host_id, count_id, people, minutes }) }),
   releaseHold: (code) => request('/holds/' + code + '/release', { method: 'POST' }),
-  arriveHold: (code) => request('/holds/' + code + '/arrive', { method: 'POST' })
+
+  // Staff only.
+  login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  staffHost: (token) => request('/staff/host', { token }),
+  updateHost: (token, id, patch) => request('/hosts/' + id, { token, method: 'PATCH', body: JSON.stringify(patch) }),
+  hostHolds: (token, id) => request('/hosts/' + id + '/holds', { token }),
+  arriveHold: (token, code) => request('/holds/' + code + '/arrive', { token, method: 'POST' })
 };

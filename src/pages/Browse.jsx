@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { blockReason, describeWho, milesBetween, usePolling } from '../lib.js';
+import { PLACE_LABEL, blockReason, clockTime, describeWho, milesBetween, openSummary, usePolling } from '../lib.js';
 import ListingCard from '../components/ListingCard.jsx';
 import Stepper from '../components/Stepper.jsx';
 
@@ -12,11 +12,14 @@ const GROUPS = [
   ['family', 'Family with children'],
   ['youth', 'Youth on their own']
 ];
+const PLACES = [['any', 'Any'], ...Object.entries(PLACE_LABEL)];
 
 export default function Browse({ search, setSearch, coords, setCoords }) {
-  const { data: hosts, error } = usePolling(() => api.hosts());
+  const { data: hosts, loadedAt, error } = usePolling(() => api.hosts());
   // 'ask' shows the explainer, 'off' hides it, 'denied' explains the fallback.
   const [locState, setLocState] = useState(coords ? 'on' : 'ask');
+  const [zip, setZip] = useState('');
+  const [zipProblem, setZipProblem] = useState('');
   const set = (patch) => setSearch({ ...search, ...patch });
 
   function shareLocation() {
@@ -33,9 +36,24 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
     );
   }
 
+  // The ZIP code goes to the server, which answers with that ZIP's approximate center.
+  async function searchZip(event) {
+    event.preventDefault();
+    if (!/^\d{5}$/.test(zip)) return setZipProblem('Enter a 5-digit ZIP code.');
+    try {
+      const found = await api.zip(zip);
+      setCoords({ lat: found.lat, lng: found.lng, label: found.label });
+      setLocState('on');
+      setZipProblem('');
+    } catch (err) {
+      setZipProblem(err.status ? err.message : 'Could not look up that ZIP code. Try again.');
+    }
+  }
+
   function stopLocation() {
     setCoords(null);
     setLocState('off');
+    setZip('');
   }
 
   const rows = (hosts || []).map((host) => ({
@@ -46,9 +64,11 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
   rows.sort((a, b) => {
     if (!a.reason !== !b.reason) return a.reason ? 1 : -1;
     if (coords) return (a.miles ?? 999) - (b.miles ?? 999);
-    return b.host.beds_available - a.host.beds_available;
+    return openSummary(b.host, search.group).n - openSummary(a.host, search.group).n;
   });
   const fitCount = rows.filter((r) => !r.reason).length;
+  // The freshest count on the page, ignoring ones too old to show.
+  const newest = (hosts || []).filter((h) => !h.expired).sort((a, b) => b.updated_at - a.updated_at)[0];
 
   return (
     <main className="page">
@@ -81,6 +101,24 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
           <Stepper value={search.people} min={1} max={9} label="people" onChange={(people) => set({ people })} />
         </div>
         <div className="field">
+          <div className="field-label" id="place-label">
+            Kind of place
+          </div>
+          <div className="pills" role="group" aria-labelledby="place-label">
+            {PLACES.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={'pill' + (search.place === id ? ' pill-on' : '')}
+                aria-pressed={search.place === id}
+                onClick={() => set({ place: id })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
           <div className="field-label">Must have</div>
           <div className="checks">
             <label className="check">
@@ -93,13 +131,37 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
             </label>
           </div>
         </div>
+        <form className="field" onSubmit={searchZip}>
+          <label className="field-label" htmlFor="zip">
+            Near ZIP code
+          </label>
+          <div className="row">
+            <input
+              id="zip"
+              className="input zip-input"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              maxLength={5}
+              value={zip}
+              onChange={(e) => setZip(e.target.value.replace(/\D/g, ''))}
+            />
+            <button type="submit" className="btn btn-outline">
+              Sort by distance
+            </button>
+          </div>
+          {zipProblem && (
+            <div className="reported reported-stale" role="alert">
+              {zipProblem}
+            </div>
+          )}
+        </form>
       </section>
 
       {locState === 'ask' && (
         <section className="loc-ask" aria-label="Location">
           <p>
-            <strong>Sort by distance?</strong> Your browser will ask to share your location. We use it once to sort
-            this list. It is never saved or sent to hosts.
+            <strong>Sort by distance?</strong> Enter a ZIP code above, or let your browser share your location. We use
+            it once to sort this list. It is never saved or sent to hosts.
           </p>
           <button type="button" className="btn btn-dark" onClick={shareLocation}>
             Use my location
@@ -112,8 +174,8 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
       {locState === 'denied' && (
         <section className="loc-ask" aria-label="Location">
           <p>
-            <strong>Location is off.</strong> The list is sorted by open beds instead. You can allow location in your
-            browser settings and try again.
+            <strong>Location is off.</strong> The list is sorted by open beds instead. Enter a ZIP code above, or allow
+            location in your browser settings and try again.
           </p>
           <button type="button" className="btn btn-outline" onClick={shareLocation}>
             Try again
@@ -130,9 +192,9 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
         <div className="results-sort">
           {coords ? (
             <>
-              Nearest first.{' '}
+              Nearest to {coords.label || 'you'} first.{' '}
               <button type="button" className="linklike" onClick={stopLocation}>
-                Stop using my location
+                {coords.label ? 'Stop sorting by ZIP code' : 'Stop using my location'}
               </button>
             </>
           ) : (
@@ -141,11 +203,24 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
         </div>
       </div>
 
-      {error && <div className="banner banner-warn">Could not reach the server. Is the API running?</div>}
+      {error && (
+        <div className="banner banner-warn" role="alert">
+          {hosts
+            ? `Can't refresh right now. This list is from ${clockTime(loadedAt)}. Trying again.`
+            : 'Could not reach the server. Is the API running?'}
+        </div>
+      )}
 
       <div className="grid">
         {rows.map(({ host, reason, miles }) => (
-          <ListingCard key={host.id} host={host} reason={reason} miles={miles} />
+          <ListingCard
+            key={host.id}
+            host={host}
+            reason={reason}
+            miles={miles}
+            group={search.group}
+            newest={host === newest}
+          />
         ))}
       </div>
     </main>

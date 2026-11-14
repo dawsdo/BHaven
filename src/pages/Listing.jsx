@@ -1,7 +1,23 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { TYPE_LABEL, ago, bedWord, isStale, takesText, usePolling } from '../lib.js';
+import {
+  KIND_LABEL,
+  NO_RECENT_UPDATE,
+  PLACE_LABEL,
+  TYPE_LABEL,
+  ago,
+  clockTime,
+  directionsUrl,
+  isStale,
+  placeKind,
+  takesText,
+  telHref,
+  unitWord,
+  unitsNeeded,
+  usableCounts,
+  usePolling
+} from '../lib.js';
 import Stepper from '../components/Stepper.jsx';
 
 const MINUTES = [15, 30, 45];
@@ -20,6 +36,8 @@ export default function Listing({ search, setSearch }) {
   const { id } = useParams();
   const { data: host, error, refresh } = usePolling(() => api.host(id), [id]);
   const [minutes, setMinutes] = useState(45);
+  // The kind of bed picked by hand. Until then the search decides.
+  const [pickedKind, setPickedKind] = useState(null);
   const [hold, setHold] = useState(() => readHold(id));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
@@ -37,17 +55,20 @@ export default function Listing({ search, setSearch }) {
   if (!host) return <main className="page">Loading…</main>;
 
   const people = search.people;
-  const cantHold = host.beds_available < people;
+  const counts = host.counts || [];
+  const count =
+    counts.find((c) => c.kind === pickedKind) ||
+    (search.group !== 'any' && usableCounts(host, search.group)[0]) ||
+    counts[0];
+  const need = count ? unitsNeeded(count, people) : people;
+  const cantHold = !count || count.available < need;
   const stale = isStale(host.updated_at);
-  const directions =
-    'https://www.google.com/maps/dir/?api=1&destination=' +
-    encodeURIComponent(host.name + ', ' + host.address + ', Birmingham, AL');
 
   async function placeHold() {
     setBusy(true);
     setProblem('');
     try {
-      const made = await api.createHold(host.id, people, minutes);
+      const made = await api.createHold(host.id, count.id, people, minutes);
       // Kept only in this browser tab so a refresh does not lose the code.
       sessionStorage.setItem(holdKey(id), JSON.stringify(made));
       setHold(made);
@@ -71,7 +92,9 @@ export default function Listing({ search, setSearch }) {
     }
   }
 
-  const tags = [host.step_free && 'Step-free', host.pets && 'Pets allowed'].filter(Boolean);
+  const tags = [PLACE_LABEL[placeKind(host)], host.step_free && 'Step-free', host.pets && 'Pets allowed'].filter(
+    Boolean
+  );
 
   return (
     <main className="page">
@@ -85,21 +108,57 @@ export default function Listing({ search, setSearch }) {
           <div>
             <div className="eyebrow">{TYPE_LABEL[host.type]}</div>
             <h1>{host.name}</h1>
-            <p className="detail-addr">{host.address}, Birmingham</p>
+            <p className="detail-addr">{host.address}</p>
+          </div>
+          <div className="row">
+            {host.phone && (
+              <a className="btn btn-outline" href={telHref(host.phone)}>
+                Call {host.phone}
+              </a>
+            )}
+            <a className="btn btn-outline" href={directionsUrl(host)} target="_blank" rel="noreferrer">
+              Directions
+            </a>
           </div>
           <dl className="facts">
             <dt>Takes</dt>
             <dd className="strong">{takesText(host)}</dd>
             <dt>Open now</dt>
             <dd className="strong">
-              {host.accepting
-                ? `${host.beds_available} ${bedWord(host.beds_available)}`
-                : 'Not taking arrivals tonight'}
+              {!host.accepting ? (
+                'Not taking arrivals tonight'
+              ) : host.expired ? (
+                NO_RECENT_UPDATE
+              ) : (
+                <ul className="count-rows">
+                  {counts.map((c) => (
+                    <li key={c.id}>
+                      <span>
+                        {KIND_LABEL[c.kind]}
+                        {c.capacity != null && <span className="muted"> · {c.capacity} total</span>}
+                      </span>
+                      <span>{c.available === 0 ? 'Full' : c.available + ' open'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </dd>
             <dt>Good to know</dt>
             <dd>{tags.length ? tags.join(', ') : 'Nothing listed yet'}</dd>
+            {host.languages.length > 0 && (
+              <>
+                <dt>Languages</dt>
+                <dd>{host.languages.join(', ')}</dd>
+              </>
+            )}
             <dt>Arriving</dt>
             <dd>{host.note || 'Not set by the host yet'}</dd>
+            {host.organization && (
+              <>
+                <dt>Run by</dt>
+                <dd>{host.organization}</dd>
+              </>
+            )}
             <dt>Count reported</dt>
             <dd className={stale ? 'reported-stale' : ''}>
               {ago(host.updated_at)}
@@ -114,16 +173,23 @@ export default function Listing({ search, setSearch }) {
               <div className="eyebrow eyebrow-ok">Held</div>
               <div className="hold-code">{hold.code}</div>
               <p>
-                {hold.people} {bedWord(hold.people)} held at {host.name} until{' '}
-                {new Date(hold.expires_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+                {hold.beds} {unitWord(hold.kind, hold.beds)} held at {host.name} until {clockTime(hold.expires_at)}.
               </p>
               <p className="muted">Show this code at the door. The hold releases on its own if no one arrives.</p>
-              <a className="btn btn-primary btn-lg" href={directions} target="_blank" rel="noreferrer">
+              <a className="btn btn-primary btn-lg" href={directionsUrl(host)} target="_blank" rel="noreferrer">
                 Get directions
               </a>
               <button type="button" className="btn btn-outline" onClick={release} disabled={busy}>
                 Release hold
               </button>
+            </>
+          ) : host.expired ? (
+            <>
+              <h2>Hold a bed</h2>
+              <div className="banner banner-warn">{NO_RECENT_UPDATE}</div>
+              <p className="muted">
+                This place has not confirmed its open beds in the last 24 hours, so a bed cannot be held here.
+              </p>
             </>
           ) : (
             <>
@@ -138,6 +204,24 @@ export default function Listing({ search, setSearch }) {
                   onChange={(n) => setSearch({ ...search, people: n })}
                 />
               </div>
+              {counts.length > 1 && (
+                <div className="field">
+                  <div id="kind-label">Kind of bed</div>
+                  <div className="segmented" role="group" aria-labelledby="kind-label">
+                    {counts.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={'seg' + (c === count ? ' seg-on' : '')}
+                        aria-pressed={c === count}
+                        onClick={() => setPickedKind(c.kind)}
+                      >
+                        {KIND_LABEL[c.kind]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="field">
                 <div id="within-label">Arriving within</div>
                 <div className="segmented" role="group" aria-labelledby="within-label">
@@ -160,7 +244,9 @@ export default function Listing({ search, setSearch }) {
                 onClick={placeHold}
                 disabled={cantHold || busy}
               >
-                {cantHold ? 'Not enough beds open' : `Hold ${people} ${bedWord(people)} for ${minutes} min`}
+                {cantHold
+                  ? `Not enough ${unitWord(count?.kind, 2)} open`
+                  : `Hold ${need} ${unitWord(count.kind, need)} for ${minutes} min`}
               </button>
               {problem && <div className="banner banner-warn">{problem}</div>}
               <p className="muted">

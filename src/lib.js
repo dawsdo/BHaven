@@ -29,7 +29,14 @@ export function takes(host, group) {
   return !!host[TAKES[group]] || (group === 'women_children' && !!host.takes_families);
 }
 
-export const bedWord = (n) => (n === 1 ? 'bed' : 'beds');
+// Whether a place is single-gender, worked out from who it takes. '' when no label fits.
+export const PLACE_LABEL = { women_only: 'Women only', men_only: 'Men only', co_ed: 'Co-ed' };
+export function placeKind(host) {
+  const women = host.takes_women || host.takes_women_children;
+  if (host.takes_families || (host.takes_men && women)) return 'co_ed';
+  if (host.takes_men) return 'men_only';
+  return women ? 'women_only' : '';
+}
 
 export function takesText(host) {
   const out = [];
@@ -41,14 +48,64 @@ export function takesText(host) {
   return out.join(', ');
 }
 
+export const bedWord = (n) => (n === 1 ? 'bed' : 'beds');
+
+// A host reports open beds per kind. A 'family' count is in rooms, the rest are in beds.
+export const KIND_LABEL = {
+  men: "Men's beds",
+  women: "Women's beds",
+  family: 'Family rooms',
+  youth: 'Youth beds',
+  any: 'Beds'
+};
+// Which count a search draws on: the first of these kinds the host has. A woman with
+// children uses a family room where there is one, and a women's bed where there is not.
+const KINDS_FOR = {
+  men: ['men', 'any'],
+  women: ['women', 'any'],
+  women_children: ['family', 'women', 'any'],
+  family: ['family', 'any'],
+  youth: ['youth', 'any']
+};
+
+// The counts this search could use at this host. Empty when the counts are withheld.
+export function usableCounts(host, group) {
+  const counts = host.counts || [];
+  if (group === 'any') return counts;
+  const kind = KINDS_FOR[group].find((k) => counts.some((c) => c.kind === k));
+  return counts.filter((c) => c.kind === kind);
+}
+
+// A family room is held whole. Every other kind is held one bed per person.
+export const unitsNeeded = (count, people) => (count.kind === 'family' ? 1 : people);
+export const unitWord = (kind, n) => (kind === 'family' ? (n === 1 ? 'family room' : 'family rooms') : bedWord(n));
+
+// The big number on a card: what is open for this search, and what to call it.
+export function openSummary(host, group) {
+  const counts = usableCounts(host, group);
+  const n = counts.reduce((sum, c) => sum + c.available, 0);
+  const rooms = counts.filter((c) => c.kind === 'family').length;
+  const word = rooms === 0 ? bedWord(n) : rooms === counts.length ? unitWord('family', n) : 'beds and rooms';
+  return { n, word };
+}
+
+// Shown in place of a count nobody has confirmed in 24 hours. The API withholds the number.
+export const NO_RECENT_UPDATE = 'No recent update. Call to confirm.';
+
 // Why a host cannot take this search, or '' when it can.
 export function blockReason(host, search) {
   if (!host.accepting) return 'Not taking arrivals tonight';
   if (!takes(host, search.group)) return 'Does not take ' + GROUP_NOUN[search.group];
+  if (search.place !== 'any' && placeKind(host) !== search.place) {
+    return 'Not ' + PLACE_LABEL[search.place].toLowerCase();
+  }
   if (search.stepFree && !host.step_free) return 'No step-free access';
   if (search.pets && !host.pets) return 'No pets';
-  if (host.beds_available === 0) return 'Full';
-  if (host.beds_available < search.people) return 'Only ' + host.beds_available + ' open';
+  if (host.expired) return NO_RECENT_UPDATE;
+  const counts = usableCounts(host, search.group);
+  const open = counts.reduce((sum, c) => sum + c.available, 0);
+  if (open === 0) return 'Full';
+  if (!counts.some((c) => c.available >= unitsNeeded(c, search.people))) return 'Only ' + open + ' open';
   return '';
 }
 
@@ -72,6 +129,11 @@ export function ago(ts, now = Date.now()) {
 // A count nobody has confirmed in 3 hours is flagged so responders call ahead.
 export const isStale = (ts, now = Date.now()) => now - ts > 3 * 60 * 60000;
 
+export const clockTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export const telHref = (phone) => 'tel:' + phone.replace(/[^\d+]/g, '');
+export const directionsUrl = (host) =>
+  'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(host.name + ', ' + host.address);
+
 export function milesBetween(a, b) {
   if (!a || b.lat == null || b.lng == null) return null;
   const rad = (d) => (d * Math.PI) / 180;
@@ -81,9 +143,11 @@ export function milesBetween(a, b) {
   return 3958.8 * 2 * Math.asin(Math.sqrt(h));
 }
 
-// Re-runs `load` every few seconds so bed counts stay current without a refresh.
+// Re-runs `load` every few seconds, and when the tab comes back to the front, so bed counts
+// stay current without a refresh. `loadedAt` is when `data` last arrived.
 export function usePolling(load, deps = [], everyMs = 4000) {
   const [data, setData] = useState(null);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [error, setError] = useState(null);
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -96,19 +160,23 @@ export function usePolling(load, deps = [], everyMs = 4000) {
         .then((d) => {
           if (live) {
             setData(d);
+            setLoadedAt(Date.now());
             setError(null);
           }
         })
         .catch((e) => live && setError(e));
     run();
     const timer = setInterval(run, everyMs);
+    const onVisible = () => document.visibilityState === 'visible' && run();
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       live = false;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   const refresh = () => loadRef.current().then(setData).catch(setError);
-  return { data, error, refresh };
+  return { data, loadedAt, error, refresh };
 }

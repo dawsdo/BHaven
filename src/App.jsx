@@ -6,7 +6,7 @@ import Host from './pages/Host.jsx';
 
 export default function App() {
   // The search lives here so it survives moving between the list and a listing.
-  const [search, setSearch] = useState({ group: 'any', people: 1, stepFree: false, pets: false });
+  const [search, setSearch] = useState({ group: 'any', place: 'any', people: 1, stepFree: false, pets: false });
   const [coords, setCoords] = useState(null);
 
   return (

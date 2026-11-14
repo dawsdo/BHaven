@@ -3,6 +3,7 @@ import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hashPassword } from './auth.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,6 +20,11 @@ if (!/^[A-Za-z0-9_]+$/.test(DB_NAME)) {
 }
 
 export const pool = new pg.Pool({ ...config, database: DB_NAME, max: 10 });
+
+// Without this handler, a dropped idle connection (for example Docker restarting) crashes the server.
+pool.on('error', (err) => {
+  console.error('Database connection dropped. It will reconnect on the next request.', err.message);
+});
 
 const readSql = (file) => fs.readFileSync(path.join(here, file), 'utf8');
 
@@ -45,11 +51,19 @@ export async function initDb() {
   if (Number(rows[0].n) === 0) {
     await pool.query(readSql('seed.sql'));
     console.log(`Seeded demo hosts into PostgreSQL database "${DB_NAME}"`);
+    // The seed file creates the demo staff accounts without a password, so none is ever committed.
+    const password = process.env.SEED_STAFF_PASSWORD;
+    if (password) {
+      await pool.query('UPDATE staff_users SET password_hash = $1', [await hashPassword(password)]);
+    } else {
+      console.log('SEED_STAFF_PASSWORD is not set, so no demo staff account can sign in.');
+      console.log('Add it to .env, then run: npm run reset-db');
+    }
   }
 }
 
 // Drops the demo tables. Used by: npm run reset-db
 export async function dropTables() {
   await ensureDatabase();
-  await pool.query('DROP TABLE IF EXISTS holds; DROP TABLE IF EXISTS hosts;');
+  await pool.query('DROP TABLE IF EXISTS holds, staff_users, bed_counts, hosts, organizations, zip_codes');
 }
