@@ -138,6 +138,12 @@ export const directionsUrl = (host) =>
     ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(host.name + ', ' + host.address)
     : null;
 
+// The same place as an embeddable Google map. Keyless embed; null on the same terms as above.
+export const mapEmbedUrl = (host) =>
+  host.address
+    ? 'https://www.google.com/maps?output=embed&q=' + encodeURIComponent(host.name + ', ' + host.address)
+    : null;
+
 export function milesBetween(a, b) {
   if (!a || b.lat == null || b.lng == null) return null;
   const rad = (d) => (d * Math.PI) / 180;

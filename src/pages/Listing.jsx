@@ -10,6 +10,7 @@ import {
   clockTime,
   directionsUrl,
   isStale,
+  mapEmbedUrl,
   placeKind,
   takesText,
   telHref,
@@ -105,7 +106,17 @@ export default function Listing({ search, setSearch }) {
 
       <div className="detail">
         <div className="detail-main">
-          <div className="photo-slot photo-slot-lg">Photo: front entrance and drop-off door</div>
+          {host.address ? (
+            <iframe
+              className="map-frame"
+              title={'Map showing ' + host.name}
+              src={mapEmbedUrl(host)}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="photo-slot photo-slot-lg">Photo: front entrance and drop-off door</div>
+          )}
           <div>
             <div className="eyebrow">{TYPE_LABEL[host.type]}</div>
             <h1>{host.name}</h1>

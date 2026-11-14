@@ -220,7 +220,7 @@ the responder to confirm by phone. A `takes_veterans` column would be the honest
 | Route        | What it is                                                              |
 | ------------ | ----------------------------------------------------------------------- |
 | `/`          | Browse and filter places with open beds, sorted by ZIP code or location |
-| `/place/:id` | One listing, with Call, Directions and the "Hold a bed" panel           |
+| `/place/:id` | One listing, with a Google map, Call, Directions and the "Hold a bed" panel |
 | `/host`      | Host console, after sign-in: update counts, pause arrivals, check people in |
 
 ## API
@@ -293,6 +293,9 @@ count however many people are coming.
   or on `localhost`.
 - A typed ZIP code is sent to the server, which answers with that ZIP's approximate center. The
   server keeps no request log.
+- A listing with an address shows an embedded Google map of it (`mapEmbedUrl` in `src/lib.js`, no
+  API key), so opening that listing loads the map from Google. Confidential and address-less
+  listings embed nothing.
 - Confidential shelters carry no address or coordinates anywhere in the system. See decision 4.
 - Staff passwords are stored as salted scrypt hashes. No password is committed to the repository.
 
