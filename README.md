@@ -14,22 +14,24 @@ real, but this project is not affiliated with or endorsed by them.
 
 ## Run it
 
-Needs Node 20 or newer and a running MySQL server.
+Needs Node 20 or newer and Docker Compose (or a separately installed MySQL 8 server).
 
 ```bash
 npm install
-cp .env.example .env    # Windows: copy .env.example .env
+cp .env.example .env
+docker compose up -d db
 ```
 
-Put your MySQL user and password in `.env`, then:
+Wait for the database to report healthy with `docker compose ps`, then run:
 
 ```bash
 npm run dev
 ```
 
 Open http://localhost:5173. The API runs on port 3001 and Vite proxies `/api` to it. On first start
-the server creates the `shelterlink` database and its tables and seeds the demo hosts, so the MySQL
-user needs permission to create a database (or create it yourself first and name it in `.env`).
+the server creates the tables and seeds the demo hosts. Compose exposes MySQL only on localhost and
+stores its data in the `mysql_data` volume. For a separately installed MySQL server, update the
+credentials in `.env`; the MySQL user needs permission to create the `shelterlink` database.
 
 - `npm run reset-db` drops the tables and re-seeds them.
 - `npm run build && npm start` serves the built app and the API together on one port (3001, or `PORT`).
