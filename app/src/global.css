@@ -1,0 +1,47 @@
+/* Web only. Themes the parts of the page the browser draws, using the colors in theme.ts. */
+
+html,
+body {
+  background: #f4f1ea; /* colors.background, so overscroll does not flash white */
+  accent-color: #0a5c55;
+}
+
+::selection {
+  background: #cfe9da;
+  color: #1a1d21;
+}
+
+input {
+  caret-color: #0a5c55;
+}
+
+/* One focus ring for keyboard users, in the primary color, on every control. */
+html :focus-visible {
+  outline: 2px solid #0a5c55;
+  outline-offset: 2px;
+}
+
+/* Controls ease between rest, hover and press. */
+[role="button"] {
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+[role="heading"] {
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [role="button"] {
+    transition: none;
+  }
+}
