@@ -1,0 +1,71 @@
+# ShelterLink BHM
+
+Find an open shelter bed in Birmingham, AL and hold it, Airbnb-style. Hosts (shelters, warming
+stations, community spaces) keep their own bed counts current.
+
+Built for ShiptHacks. **All bed counts and policies are demo data.** The organizations listed are
+real, but this project is not affiliated with or endorsed by them.
+
+## Stack
+
+- React 18 + Vite, plain CSS (`src/`)
+- Express API (`server/index.js`)
+- SQLite database through `better-sqlite3` (`server/schema.sql`, `server/seed.sql`)
+
+## Run it
+
+Needs Node 20 or newer.
+
+```bash
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The API runs on port 3001 and Vite proxies `/api` to it. The database
+file `server/data.db` is created and seeded on first start.
+
+- `npm run reset-db` wipes the database so the next start re-seeds it.
+- `npm run build && npm start` serves the built app and the API together on one port (3001, or `PORT`).
+
+## Demo script
+
+1. Open `/` in one window and `/host` in another.
+2. On `/host`, change a bed count. The browse page updates within a few seconds.
+3. On `/`, pick who needs a place, open a listing, and hold a bed. You get a code.
+4. Back on `/host`, the hold shows under "On the way to you". Press "Check in".
+
+## Pages
+
+| Route        | What it is                                                   |
+| ------------ | ------------------------------------------------------------ |
+| `/`          | Browse and filter places with open beds                      |
+| `/place/:id` | One listing, with the "Hold a bed" panel                     |
+| `/host`      | Host console: update the count, pause arrivals, check people in |
+
+## API
+
+| Method | Path                       | Purpose                                       |
+| ------ | -------------------------- | --------------------------------------------- |
+| GET    | `/api/hosts`               | Verified hosts (`?all=1` includes unverified) |
+| GET    | `/api/hosts/:id`           | One host                                      |
+| PATCH  | `/api/hosts/:id`           | `{ beds_open?, accepting? }`; empty body confirms the count |
+| GET    | `/api/hosts/:id/holds`     | Live holds for a host                         |
+| POST   | `/api/holds`               | `{ host_id, people, minutes }` returns a code |
+| POST   | `/api/holds/:code/release` | Cancel a hold                                 |
+| POST   | `/api/holds/:code/arrive`  | Check in: closes the hold, lowers the count   |
+
+`beds_available = beds_open - people on unexpired holds`. Holds expire on their own.
+
+## Privacy choices
+
+- No names, photos, or health details are collected. A hold is a code and a head count.
+- Location is requested only when the user presses "Use my location". It is used in the browser
+  to sort the list and is never sent to the server. Browsers only allow this over HTTPS or on
+  `localhost`.
+
+## Not built yet
+
+- Login for hosts. The host console lets anyone pick any host, which is fine for a demo only.
+- "List a space" form and the review step that verifies new hosts.
+- Ride requests and a dispatch map for people who cannot get to the shelter themselves.
+- Per-group bed counts (men, women, families) instead of one number per host.
