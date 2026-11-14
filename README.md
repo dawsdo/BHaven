@@ -10,15 +10,15 @@ real, but this project is not affiliated with or endorsed by them.
 
 - React 18 + Vite, plain CSS (`src/`)
 - Express API (`server/index.js`)
-- MySQL 8 through `mysql2` (`server/schema.sql`, `server/seed.sql`)
+- PostgreSQL through `pg` (`server/schema.sql`, `server/seed.sql`)
 
 ## Run it
 
-Needs Node 20 or newer and Docker Compose (or a separately installed MySQL 8 server).
+Needs Node 20 or newer and Docker Compose (or a separately installed PostgreSQL server).
 
 ```bash
-npm install
-cp .env.example .env
+npm ci
+cp .env.example .env    # Windows: copy .env.example .env
 docker compose up -d db
 ```
 
@@ -29,9 +29,11 @@ npm run dev
 ```
 
 Open http://localhost:5173. The API runs on port 3001 and Vite proxies `/api` to it. On first start
-the server creates the tables and seeds the demo hosts. Compose exposes MySQL only on localhost and
-stores its data in the `mysql_data` volume. For a separately installed MySQL server, update the
-credentials in `.env`; the MySQL user needs permission to create the `shelterlink` database.
+the server creates the database if needed, creates its tables, and seeds the demo hosts. Compose
+exposes PostgreSQL only on localhost and stores its data in the `postgres_data` volume. The sample
+credentials are for local development only. For a separately installed PostgreSQL server, update
+`PGHOST`, `PGPORT`, `PGUSER`, and `PGPASSWORD` in `.env`; the user needs permission to create a
+database.
 
 - `npm run reset-db` drops the tables and re-seeds them.
 - `npm run build && npm start` serves the built app and the API together on one port (3001, or `PORT`).
