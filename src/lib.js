@@ -131,8 +131,12 @@ export const isStale = (ts, now = Date.now()) => now - ts > 3 * 60 * 60000;
 
 export const clockTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 export const telHref = (phone) => 'tel:' + phone.replace(/[^\d+]/g, '');
+// null when there is no address to send anyone to. The API sends none for a confidential
+// host, and a link built from the name alone would still point a search engine at it.
 export const directionsUrl = (host) =>
-  'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(host.name + ', ' + host.address);
+  host.address
+    ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(host.name + ', ' + host.address)
+    : null;
 
 export function milesBetween(a, b) {
   if (!a || b.lat == null || b.lng == null) return null;

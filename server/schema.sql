@@ -1,22 +1,19 @@
 -- ShelterLink BHM schema (PostgreSQL). Times are Unix milliseconds stored as BIGINT.
 -- Nothing here identifies the person who needs a bed: a hold is a code and a head count.
-
--- The organization behind one or more hosts. A community host run by a person has none.
-CREATE TABLE IF NOT EXISTS organizations (
-  id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  legal_name    TEXT NOT NULL,
-  -- US EIN format. A format check only: nothing is looked up in a registry.
-  tax_id        TEXT NOT NULL UNIQUE CHECK (tax_id ~ '^[0-9]{2}-[0-9]{7}$'),
-  email_domain  TEXT NOT NULL
-);
+--
+-- The server only creates missing tables; it does not alter existing ones. After a change
+-- to this file, rebuild with: npm run reset-db
 
 CREATE TABLE IF NOT EXISTS hosts (
   id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  organization_id INTEGER REFERENCES organizations (id),
   name          TEXT    NOT NULL,
   type          TEXT    NOT NULL CHECK (type IN ('shelter', 'warming', 'community')),
-  address       TEXT    NOT NULL,
-  phone         TEXT    NOT NULL DEFAULT '',
+  -- NULL when the address is withheld or not known. Domestic violence shelters keep
+  -- confidential locations by design: publishing one puts the people inside it at risk.
+  address       TEXT,
+  address_confidential BOOLEAN NOT NULL DEFAULT FALSE,
+  -- The only way to reach a host whose address is withheld, so it carries real weight.
+  phone         TEXT,
   lat           DOUBLE PRECISION,
   lng           DOUBLE PRECISION,
   -- Who a host takes. takes_men / takes_women mean single adults. takes_families means any
@@ -36,12 +33,17 @@ CREATE TABLE IF NOT EXISTS hosts (
   verified      BOOLEAN NOT NULL DEFAULT FALSE,  -- approved to appear in the list and post counts
   note          TEXT    NOT NULL DEFAULT '',
   -- When staff last changed or confirmed the counts. Counts older than 24 hours are withheld.
-  updated_at    BIGINT  NOT NULL
+  updated_at    BIGINT  NOT NULL,
+  -- A withheld location must actually be absent, not merely flagged. Without this a
+  -- confidential row could still carry an address or coordinates that some future query leaks.
+  CONSTRAINT hosts_confidential_has_no_location
+    CHECK (NOT address_confidential OR (address IS NULL AND lat IS NULL AND lng IS NULL))
 );
 
 -- Open beds, one row per kind of bed a host has. 'any' is a bed not set aside for one group.
 -- A 'family' row counts rooms (family units), every other kind counts beds.
--- capacity is the host's total of that kind, when known; open beds can never exceed it.
+-- capacity is the host's total of that kind (funded inventory from the HUD HIC), when
+-- known. It is not vacancy. Open beds can never exceed it.
 CREATE TABLE IF NOT EXISTS bed_counts (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   host_id     INTEGER NOT NULL REFERENCES hosts (id),

@@ -131,7 +131,9 @@ function Console({ token, signOut }) {
   const open = openSummary(host, 'any');
   const headline = !host.accepting
     ? 'Not taking arrivals'
-    : open.n === 0
+    : host.expired
+      ? 'Your counts are not being shown'
+      : open.n === 0
       ? 'Full tonight'
       : `${open.n} ${open.word} open to new arrivals`;
 
@@ -158,7 +160,7 @@ function Console({ token, signOut }) {
           <h2>{headline}</h2>
           <p className={stale ? 'reported-stale' : ''}>
             {host.expired
-              ? `Last confirmed ${ago(host.updated_at)}. Your counts are hidden from people searching until you confirm.`
+              ? 'Not confirmed in the last 24 hours. Until you confirm, people searching see a dash and are told to call, not your last numbers.'
               : stale
                 ? `Last confirmed ${ago(host.updated_at)}. People searching see a stale warning until you confirm.`
                 : `Last confirmed ${ago(host.updated_at)}. People searching see these numbers.`}

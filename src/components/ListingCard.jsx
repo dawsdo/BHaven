@@ -17,8 +17,13 @@ import {
 export default function ListingCard({ host, reason, miles, group, newest }) {
   const fits = !reason;
   const stale = isStale(host.updated_at);
-  const line = [takesText(host), host.address];
+  // A confidential host has no address to show. Say why, so it reads as a policy
+  // rather than as missing data, and the phone number below becomes the way in.
+  const line = [takesText(host)];
+  if (host.address_confidential) line.push('Location confidential');
+  else if (host.address) line.push(host.address);
   if (miles != null) line.push('about ' + miles.toFixed(1) + ' mi');
+  const directions = directionsUrl(host);
   const counts = host.counts || [];
   // A place that does not take this group still shows what it has open in all.
   const open = openSummary(host, takes(host, group) ? group : 'any');
@@ -58,9 +63,11 @@ export default function ListingCard({ host, reason, miles, group, newest }) {
               Call {host.phone}
             </a>
           )}
-          <a href={directionsUrl(host)} target="_blank" rel="noreferrer" aria-label={'Directions to ' + host.name}>
-            Directions
-          </a>
+          {directions && (
+            <a href={directions} target="_blank" rel="noreferrer" aria-label={'Directions to ' + host.name}>
+              Directions
+            </a>
+          )}
         </div>
         <div className="card-foot">
           <div>
@@ -68,10 +75,13 @@ export default function ListingCard({ host, reason, miles, group, newest }) {
               <span className="count-num">{host.accepting && !host.expired ? open.n : '–'}</span>
               {host.accepting && !host.expired && <span>{open.word} open</span>}
             </div>
-            <div className={'reported' + (stale ? ' reported-stale' : '')}>
-              Reported {ago(host.updated_at)}
-              {stale ? ', may be out of date' : ''}
-            </div>
+            {/* Once a count is withheld its age is not shown either: it may never have been reported. */}
+            {!host.expired && (
+              <div className={'reported' + (stale ? ' reported-stale' : '')}>
+                Reported {ago(host.updated_at)}
+                {stale ? ', may be out of date' : ''}
+              </div>
+            )}
           </div>
           {fits ? (
             <Link className="btn btn-primary" to={'/place/' + host.id}>

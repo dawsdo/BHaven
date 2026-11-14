@@ -489,6 +489,7 @@ select,
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .count {
   display: flex;
@@ -516,11 +517,12 @@ select,
   font-weight: 700;
 }
 .reason {
-  max-width: 140px;
+  max-width: 160px;
   text-align: right;
   font-size: 13px;
   font-weight: 700;
   color: #3a4744;
+  overflow-wrap: break-word;
 }
 
 /* Listing detail */

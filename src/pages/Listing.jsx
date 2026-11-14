@@ -63,6 +63,7 @@ export default function Listing({ search, setSearch }) {
   const need = count ? unitsNeeded(count, people) : people;
   const cantHold = !count || count.available < need;
   const stale = isStale(host.updated_at);
+  const directions = directionsUrl(host);
 
   async function placeHold() {
     setBusy(true);
@@ -108,17 +109,23 @@ export default function Listing({ search, setSearch }) {
           <div>
             <div className="eyebrow">{TYPE_LABEL[host.type]}</div>
             <h1>{host.name}</h1>
-            <p className="detail-addr">{host.address}</p>
+            <p className="detail-addr">
+              {host.address_confidential
+                ? 'Location confidential. Call for directions and intake.'
+                : host.address || 'No address listed. Call ahead.'}
+            </p>
           </div>
           <div className="row">
             {host.phone && (
-              <a className="btn btn-outline" href={telHref(host.phone)}>
+              <a className="btn btn-primary" href={telHref(host.phone)}>
                 Call {host.phone}
               </a>
             )}
-            <a className="btn btn-outline" href={directionsUrl(host)} target="_blank" rel="noreferrer">
-              Directions
-            </a>
+            {directions && (
+              <a className="btn btn-outline" href={directions} target="_blank" rel="noreferrer">
+                Directions
+              </a>
+            )}
           </div>
           <dl className="facts">
             <dt>Takes</dt>
@@ -153,16 +160,11 @@ export default function Listing({ search, setSearch }) {
             )}
             <dt>Arriving</dt>
             <dd>{host.note || 'Not set by the host yet'}</dd>
-            {host.organization && (
-              <>
-                <dt>Run by</dt>
-                <dd>{host.organization}</dd>
-              </>
-            )}
             <dt>Count reported</dt>
             <dd className={stale ? 'reported-stale' : ''}>
-              {ago(host.updated_at)}
-              {stale ? '. May be out of date, call ahead.' : ''}
+              {host.expired
+                ? NO_RECENT_UPDATE
+                : ago(host.updated_at) + (stale ? '. May be out of date, call ahead.' : '')}
             </dd>
           </dl>
         </div>
@@ -176,9 +178,16 @@ export default function Listing({ search, setSearch }) {
                 {hold.beds} {unitWord(hold.kind, hold.beds)} held at {host.name} until {clockTime(hold.expires_at)}.
               </p>
               <p className="muted">Show this code at the door. The hold releases on its own if no one arrives.</p>
-              <a className="btn btn-primary btn-lg" href={directionsUrl(host)} target="_blank" rel="noreferrer">
-                Get directions
-              </a>
+              {directions ? (
+                <a className="btn btn-primary btn-lg" href={directions} target="_blank" rel="noreferrer">
+                  Get directions
+                </a>
+              ) : (
+                <p className="muted">
+                  {host.address_confidential ? 'This location is confidential.' : 'No address is listed.'} Call{' '}
+                  {host.phone || 'the shelter'} for directions.
+                </p>
+              )}
               <button type="button" className="btn btn-outline" onClick={release} disabled={busy}>
                 Release hold
               </button>

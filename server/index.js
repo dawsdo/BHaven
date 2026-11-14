@@ -34,32 +34,40 @@ function ownHost(req, res, next) {
 // Every host row comes back with its bed counts and how much of each is tied up in live
 // holds ($1 is "now").
 const HOST_SQL = `
-  SELECT h.*, o.legal_name AS organization,
+  SELECT h.*,
          (SELECT COALESCE(json_agg(json_build_object(
                    'id', c.id, 'kind', c.kind, 'open', c.beds_open, 'capacity', c.capacity,
                    'held', (SELECT COALESCE(SUM(beds), 0) FROM holds
                              WHERE count_id = c.id AND status = 'held' AND expires_at > $1)
                  ) ORDER BY array_position(ARRAY['men', 'women', 'family', 'youth', 'any'], c.kind)), '[]'::json)
             FROM bed_counts c WHERE c.host_id = h.id) AS counts
-    FROM hosts h
-    LEFT JOIN organizations o ON o.id = h.organization_id`;
+    FROM hosts h`;
 
 // PostgreSQL returns BIGINT as a string, so numbers are converted here.
-// The public sees no counts once they have expired; staff always see their own.
+//
+// Two things are withheld here rather than in the browser, so that no client can
+// render them by mistake:
+//
+//   1. Counts nobody has confirmed in 24 hours. A stale number is worse than no number:
+//      someone acts on it and drives across town to a full shelter. Staff still see
+//      their own, because it is the record they are about to correct.
+//   2. The location of a confidential host. Domestic violence shelters keep their
+//      locations private by design; the address and coordinates never leave here.
 function shape(h, { forStaff = false } = {}) {
   const updated_at = Number(h.updated_at);
   const expired = Date.now() - updated_at > EXPIRY_MS;
   const counts = h.counts.map((c) => ({ ...c, available: h.accepting ? Math.max(0, c.open - c.held) : 0 }));
   const withheld = expired && !forStaff;
+  const confidential = h.address_confidential;
   return {
     id: h.id,
     name: h.name,
     type: h.type,
-    organization: h.organization,
-    address: h.address,
+    address: confidential ? null : h.address,
+    address_confidential: confidential,
     phone: h.phone,
-    lat: h.lat,
-    lng: h.lng,
+    lat: confidential ? null : h.lat,
+    lng: confidential ? null : h.lng,
     takes_men: h.takes_men,
     takes_women: h.takes_women,
     takes_women_children: h.takes_women_children,
