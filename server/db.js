@@ -26,6 +26,23 @@ if (!/^[A-Za-z0-9_]+$/.test(DB_NAME)) {
   throw new Error('PGDATABASE may only contain letters, numbers and underscores');
 }
 
+// A blank PGHOST silently falls back to 127.0.0.1 and the only symptom is
+// ECONNREFUSED on port 5432, which looks like a dead database rather than an
+// unfilled .env. Say what is actually wrong instead.
+if (useSsl) {
+  const missing = ['PGHOST', 'PGUSER', 'PGPASSWORD'].filter((k) => !(process.env[k] || '').trim());
+  if (missing.length) {
+    console.error(
+      `\n.env is incomplete: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} empty.\n\n` +
+        'PGSSL=true means a hosted database, so these cannot be left blank.\n' +
+        'Supabase: Project Settings -> Database -> Connection string -> Session pooler.\n' +
+        'That string is postgresql://PGUSER:PGPASSWORD@PGHOST:5432/postgres\n\n' +
+        'For a local Docker database instead, remove PGSSL and PGCREATE_DB from .env.\n'
+    );
+    process.exit(1);
+  }
+}
+
 // A managed database already exists and the login usually cannot run CREATE DATABASE.
 // Set PGCREATE_DB=false for Supabase and friends; leave it alone for local Docker.
 const canCreateDatabase = !/^(false|0|no)$/i.test(process.env.PGCREATE_DB || '');
