@@ -14,7 +14,8 @@ async function request(path, options) {
 }
 
 export const api = {
-  hosts: (all = false) => request('/hosts' + (all ? '?all=1' : '')),
+  // all=true is the host console: every host, and its own counts even when stale.
+  hosts: (all = false) => request('/hosts' + (all ? '?all=1&console=1' : '')),
   host: (id) => request('/hosts/' + id),
   updateHost: (id, patch) => request('/hosts/' + id, { method: 'PATCH', body: JSON.stringify(patch) }),
   hostHolds: (id) => request('/hosts/' + id + '/holds'),

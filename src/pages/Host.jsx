@@ -17,7 +17,8 @@ export default function Host() {
   const host = hosts.find((h) => String(h.id) === hostId);
   if (!host) return <main className="page">No hosts yet.</main>;
 
-  const stale = isStale(host.updated_at);
+  const stale = isStale(host);
+  const known = host.beds_available != null;
   const refresh = () => {
     refreshHosts();
     refreshHolds();
@@ -27,9 +28,11 @@ export default function Host() {
 
   const headline = !host.accepting
     ? 'Not taking arrivals'
-    : host.beds_available === 0
-      ? 'Full tonight'
-      : `${host.beds_available} ${bedWord(host.beds_available)} open to new arrivals`;
+    : !known
+      ? 'Your count is not being shown'
+      : host.beds_available === 0
+        ? 'Full tonight'
+        : `${host.beds_available} ${bedWord(host.beds_available)} open to new arrivals`;
 
   return (
     <main className="page page-narrow">
@@ -52,7 +55,7 @@ export default function Host() {
           <h2>{headline}</h2>
           <p className={stale ? 'reported-stale' : ''}>
             {stale
-              ? `Last confirmed ${ago(host.updated_at)}. People searching see a stale warning until you confirm.`
+              ? `Last confirmed ${ago(host.updated_at)}. Until you confirm, people searching see a dash and are told to call — not your last number.`
               : `Last confirmed ${ago(host.updated_at)}. People searching see these numbers.`}
           </p>
         </div>
@@ -81,7 +84,7 @@ export default function Host() {
           </div>
           <div className="row">
             <Stepper
-              value={host.beds_open}
+              value={host.beds_open ?? 0}
               max={500}
               size="lg"
               label="beds open"

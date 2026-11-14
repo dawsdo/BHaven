@@ -5,9 +5,15 @@ CREATE TABLE IF NOT EXISTS hosts (
   id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name          TEXT    NOT NULL,
   type          TEXT    NOT NULL CHECK (type IN ('shelter', 'warming', 'community')),
-  address       TEXT    NOT NULL,
+  -- NULL when the address is withheld. Domestic violence shelters keep confidential
+  -- locations by design: publishing one puts the people inside it at risk.
+  address       TEXT,
+  address_confidential BOOLEAN NOT NULL DEFAULT FALSE,
+  -- The only way to reach a host whose address is withheld, so it carries real weight.
+  phone         TEXT,
   lat           DOUBLE PRECISION,
   lng           DOUBLE PRECISION,
+  total_beds    INTEGER,  -- funded inventory (HUD HIC). Not vacancy; see beds_open.
   -- Who a host takes. takes_men / takes_women mean single adults. takes_families means any
   -- parent or parents with children, so it also covers a woman with children;
   -- takes_women_children alone does not cover other families. The app applies that rule
@@ -38,3 +44,16 @@ CREATE TABLE IF NOT EXISTS holds (
 );
 
 CREATE INDEX IF NOT EXISTS holds_by_host ON holds (host_id, status, expires_at);
+
+-- Migrations for databases created before these columns existed. All idempotent,
+-- so this file stays safe to re-run on every start.
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS address_confidential BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS total_beds INTEGER;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE hosts ALTER COLUMN address DROP NOT NULL;
+
+-- A withheld address must actually be absent, not merely flagged. Without this a
+-- confidential row could still carry a street address that some future query leaks.
+ALTER TABLE hosts DROP CONSTRAINT IF EXISTS hosts_confidential_has_no_address;
+ALTER TABLE hosts ADD CONSTRAINT hosts_confidential_has_no_address
+  CHECK (NOT address_confidential OR address IS NULL);

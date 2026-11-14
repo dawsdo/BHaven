@@ -9,7 +9,8 @@
     "web": "vite",
     "build": "vite build",
     "start": "node server/index.js",
-    "reset-db": "node server/reset.js"
+    "reset-db": "node server/reset.js",
+    "load-hic": "node server/load-hic.js"
   },
   "dependencies": {
     "dotenv": "^18.0.10",

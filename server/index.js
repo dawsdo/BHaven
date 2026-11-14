@@ -25,16 +25,46 @@ const HOST_SQL = `
            WHERE host_id = h.id AND status = 'held' AND expires_at > $1) AS beds_held
     FROM hosts h`;
 
+// How old a count may be before we stop publishing it.
+// Under 4 hours: reported at dinner, still roughly true at 9pm.
+// 4-12 hours: a morning count, flagged by night. Older: treated as never reported.
+const FRESH_MS = 4 * 60 * 60000;
+const STALE_MS = 12 * 60 * 60000;
+
+export function freshnessOf(updated_at, now = Date.now()) {
+  const age = now - updated_at;
+  if (age <= FRESH_MS) return 'fresh';
+  if (age <= STALE_MS) return 'stale';
+  return 'unknown';
+}
+
 // PostgreSQL returns BIGINT and SUM() as strings, so numbers are converted here.
-function shape(h) {
+//
+// Two things are withheld here rather than in the browser, so that no client can
+// render them by mistake:
+//
+//   1. A bed count nobody has confirmed in four hours. A stale number is worse than
+//      no number: someone acts on it and drives across town to a full shelter.
+//   2. The address of a confidential host. Domestic violence shelters keep their
+//      locations private by design; the address and coordinates never leave here.
+//
+// Pass { gate: false } for server-side logic that needs the real count.
+function shape(h, { gate = true } = {}) {
   const beds_held = Number(h.beds_held);
+  const updated_at = Number(h.updated_at);
+  const freshness = freshnessOf(updated_at);
+  const publishCount = !gate || freshness === 'fresh';
+  const confidential = !!h.address_confidential;
   return {
     id: h.id,
     name: h.name,
     type: h.type,
-    address: h.address,
-    lat: h.lat,
-    lng: h.lng,
+    address: confidential ? null : h.address,
+    address_confidential: confidential,
+    phone: h.phone ?? null,
+    total_beds: h.total_beds == null ? null : Number(h.total_beds),
+    lat: confidential ? null : h.lat,
+    lng: confidential ? null : h.lng,
     takes_men: h.takes_men,
     takes_women: h.takes_women,
     takes_women_children: h.takes_women_children,
@@ -46,28 +76,33 @@ function shape(h) {
     accepting: h.accepting,
     verified: h.verified,
     note: h.note,
-    beds_open: h.beds_open,
+    beds_open: publishCount ? h.beds_open : null,
     beds_held,
-    beds_available: h.accepting ? Math.max(0, h.beds_open - beds_held) : 0,
-    updated_at: Number(h.updated_at)
+    beds_available: publishCount ? (h.accepting ? Math.max(0, h.beds_open - beds_held) : 0) : null,
+    freshness,
+    updated_at
   };
 }
 
 // `db` is the pool, or a single client when inside a transaction.
-async function findHost(db, id, { lock = false } = {}) {
+async function findHost(db, id, { lock = false, gate = true } = {}) {
   // Take the row lock in its own statement first. The count below must run as a new
   // statement so it sees holds committed while this request was waiting for the lock.
   if (lock) await db.query('SELECT id FROM hosts WHERE id = $1 FOR UPDATE', [id]);
   const { rows } = await db.query(`${HOST_SQL} WHERE h.id = $2`, [Date.now(), id]);
-  return rows[0] ? shape(rows[0]) : null;
+  return rows[0] ? shape(rows[0], { gate }) : null;
 }
 
 app.get(
   '/api/hosts',
   route(async (req, res) => {
     const where = req.query.all === '1' ? '' : ' WHERE h.verified';
+    // The host console shows a host its own numbers, stale or not: it is the record
+    // they are about to correct. The public list stays gated.
+    // Production would put this behind host authentication rather than a query string.
+    const gate = req.query.console !== '1';
     const { rows } = await pool.query(`${HOST_SQL}${where} ORDER BY h.name`, [Date.now()]);
-    res.json(rows.map(shape));
+    res.json(rows.map((r) => shape(r, { gate })));
   })
 );
 
@@ -148,8 +183,17 @@ app.post(
 
     const out = await inTransaction(async (client) => {
       // Locking the host row makes two people holding the last bed take turns.
-      const host = await findHost(client, host_id, { lock: true });
+      // gate:false because the hold check needs the real count even when we are
+      // not publishing it; the refusal below is what the caller sees instead.
+      const host = await findHost(client, host_id, { lock: true, gate: false });
       if (!host) return { status: 404, body: { error: 'Host not found' } };
+      // Never hold a bed against a count nobody has confirmed recently.
+      if (host.freshness !== 'fresh') {
+        return {
+          status: 409,
+          body: { error: 'This count has not been confirmed recently. Call the shelter to check.' }
+        };
+      }
       if (host.beds_available < people) {
         return { status: 409, body: { error: 'Not enough beds open', beds_available: host.beds_available } };
       }

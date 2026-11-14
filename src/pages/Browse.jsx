@@ -46,7 +46,8 @@ export default function Browse({ search, setSearch, coords, setCoords }) {
   rows.sort((a, b) => {
     if (!a.reason !== !b.reason) return a.reason ? 1 : -1;
     if (coords) return (a.miles ?? 999) - (b.miles ?? 999);
-    return b.host.beds_available - a.host.beds_available;
+    // A withheld count sorts last rather than poisoning the comparison with NaN.
+    return (b.host.beds_available ?? -1) - (a.host.beds_available ?? -1);
   });
   const fitCount = rows.filter((r) => !r.reason).length;
 

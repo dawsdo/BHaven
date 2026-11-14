@@ -454,6 +454,35 @@ select {
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.count-block {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* Call and View stack so a phone number never squeezes the primary action.
+   For a confidential shelter the phone IS the primary action. */
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.card-actions .btn {
+  text-align: center;
+  white-space: nowrap;
+}
+.btn-call {
+  border: 1px solid var(--line, #d7dedb);
+  background: #fff;
+  color: #14312b;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  text-decoration: none;
 }
 .count {
   display: flex;
@@ -481,11 +510,12 @@ select {
   font-weight: 700;
 }
 .reason {
-  max-width: 140px;
+  max-width: 160px;
   text-align: right;
   font-size: 13px;
   font-weight: 700;
   color: #3a4744;
+  overflow-wrap: break-word;
 }
 
 /* Listing detail */

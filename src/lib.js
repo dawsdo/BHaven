@@ -47,6 +47,9 @@ export function blockReason(host, search) {
   if (!takes(host, search.group)) return 'Does not take ' + GROUP_NOUN[search.group];
   if (search.stepFree && !host.step_free) return 'No step-free access';
   if (search.pets && !host.pets) return 'No pets';
+  // The server withholds the count when nobody has confirmed it recently. Unknown is
+  // not the same as available: say so rather than letting it read as an open bed.
+  if (host.beds_available == null) return UNCONFIRMED_REASON;
   if (host.beds_available === 0) return 'Full';
   if (host.beds_available < search.people) return 'Only ' + host.beds_available + ' open';
   return '';
@@ -69,8 +72,23 @@ export function ago(ts, now = Date.now()) {
   return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
 }
 
-// A count nobody has confirmed in 3 hours is flagged so responders call ahead.
-export const isStale = (ts, now = Date.now()) => now - ts > 3 * 60 * 60000;
+// Freshness is decided by the server, not here. When a count is not 'fresh' the
+// server does not send the number at all, so there is nothing for this file to
+// second-guess: these helpers only describe what came back.
+export const isStale = (host) => host?.freshness !== 'fresh';
+
+// What to show where a bed count would go. Never a number the server withheld.
+export const countText = (host) => (host?.beds_available == null ? '—' : String(host.beds_available));
+
+export const FRESHNESS_NOTE = {
+  fresh: '',
+  stale: 'Not confirmed since this morning — call ahead',
+  unknown: 'Not reported — call ahead'
+};
+
+// Why a host is unavailable when the only thing wrong is the age of its count.
+// Shared so the card can avoid printing this and the freshness note side by side.
+export const UNCONFIRMED_REASON = 'Not confirmed recently — call ahead';
 
 export function milesBetween(a, b) {
   if (!a || b.lat == null || b.lng == null) return null;

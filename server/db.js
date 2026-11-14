@@ -6,24 +6,38 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// Hosted PostgreSQL (Supabase, Neon, RDS) requires TLS and will refuse a plain
+// connection. Local Docker PostgreSQL does not offer TLS at all, so this stays
+// off unless PGSSL=true.
+const useSsl = /^(true|require|1)$/i.test(process.env.PGSSL || '');
+
 // Connection settings come from .env (copy .env.example and fill in your password).
 const config = {
   host: process.env.PGHOST || '127.0.0.1',
   port: Number(process.env.PGPORT) || 5432,
   user: process.env.PGUSER || 'postgres',
-  password: process.env.PGPASSWORD || ''
+  password: process.env.PGPASSWORD || '',
+  // Managed providers terminate TLS with their own CA. We still encrypt; we just
+  // do not pin the chain, which is standard for a connection string you were handed.
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined
 };
 export const DB_NAME = process.env.PGDATABASE || 'shelterlink';
 if (!/^[A-Za-z0-9_]+$/.test(DB_NAME)) {
   throw new Error('PGDATABASE may only contain letters, numbers and underscores');
 }
 
+// A managed database already exists and the login usually cannot run CREATE DATABASE.
+// Set PGCREATE_DB=false for Supabase and friends; leave it alone for local Docker.
+const canCreateDatabase = !/^(false|0|no)$/i.test(process.env.PGCREATE_DB || '');
+
 export const pool = new pg.Pool({ ...config, database: DB_NAME, max: 10 });
 
 const readSql = (file) => fs.readFileSync(path.join(here, file), 'utf8');
 
 // Creates the database if it is missing (connects to the built-in "postgres" database to do it).
+// Skipped against a managed provider, where the database is already there.
 async function ensureDatabase() {
+  if (!canCreateDatabase) return;
   const admin = new pg.Client({ ...config, database: 'postgres' });
   await admin.connect();
   try {
