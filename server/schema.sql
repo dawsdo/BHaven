@@ -8,9 +8,16 @@ CREATE TABLE IF NOT EXISTS hosts (
   address       TEXT    NOT NULL,
   lat           DOUBLE PRECISION,
   lng           DOUBLE PRECISION,
-  takes_men     BOOLEAN NOT NULL DEFAULT FALSE,
-  takes_women   BOOLEAN NOT NULL DEFAULT FALSE,
-  takes_family  BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Who a host takes. takes_men / takes_women mean single adults. takes_families means any
+  -- parent or parents with children, so it also covers a woman with children;
+  -- takes_women_children alone does not cover other families. The app applies that rule
+  -- in takes() in src/lib.js.
+  takes_men            BOOLEAN NOT NULL DEFAULT FALSE,
+  takes_women          BOOLEAN NOT NULL DEFAULT FALSE,
+  takes_women_children BOOLEAN NOT NULL DEFAULT FALSE,
+  takes_families       BOOLEAN NOT NULL DEFAULT FALSE,
+  takes_youth          BOOLEAN NOT NULL DEFAULT FALSE,  -- unaccompanied young people
+  youth_max_age        INTEGER CHECK (youth_max_age > 0),  -- NULL: no stated limit, or no youth
   step_free     BOOLEAN NOT NULL DEFAULT FALSE,
   pets          BOOLEAN NOT NULL DEFAULT FALSE,
   beds_open     INTEGER NOT NULL DEFAULT 0 CHECK (beds_open >= 0),

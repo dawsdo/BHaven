@@ -35,7 +35,8 @@ credentials are for local development only. For a separately installed PostgreSQ
 `PGHOST`, `PGPORT`, `PGUSER`, and `PGPASSWORD` in `.env`; the user needs permission to create a
 database.
 
-- `npm run reset-db` drops the tables and re-seeds them.
+- `npm run reset-db` drops the tables and re-seeds them. Run it after pulling a change to
+  `server/schema.sql`: the server only creates missing tables, it does not alter existing ones.
 - `npm run build && npm start` serves the built app and the API together on one port (3001, or `PORT`).
 - `.env` holds your password and is git-ignored. Each teammate makes their own.
 
@@ -68,6 +69,23 @@ database.
 
 `beds_available = beds_open - people on unexpired holds`. Holds expire on their own.
 
+## Who a host takes
+
+Each host row carries five flags, returned as-is by the hosts endpoints:
+
+| Field                  | Means                                                    | Search pill          |
+| ---------------------- | -------------------------------------------------------- | -------------------- |
+| `takes_men`            | Single adult men                                         | Man                  |
+| `takes_women`          | Single adult women                                       | Woman                |
+| `takes_women_children` | Mothers with children                                    | Woman with children  |
+| `takes_families`       | Any parent or parents with children                      | Family with children |
+| `takes_youth`          | Unaccompanied young people; `youth_max_age` is the oldest age taken, or `null` | Youth on their own |
+
+A woman with children is a family, so a host with `takes_families` also matches a "Woman with
+children" search. It does not run the other way: `takes_women_children` alone does not match a
+"Family with children" search. The matching lives in `takes()` in `src/lib.js`; the API only
+returns the flags.
+
 ## Privacy choices
 
 - No names, photos, or health details are collected. A hold is a code and a head count.
@@ -80,4 +98,6 @@ database.
 - Login for hosts. The host console lets anyone pick any host, which is fine for a demo only.
 - "List a space" form and the review step that verifies new hosts.
 - Ride requests and a dispatch map for people who cannot get to the shelter themselves.
-- Per-group bed counts (men, women, families) instead of one number per host.
+- Per-group bed counts (men, women, women with children, families, youth) instead of one number
+  per host.
+- Searching by a young person's age. `youth_max_age` is shown on the listing but not filtered on.

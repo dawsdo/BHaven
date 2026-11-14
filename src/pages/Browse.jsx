@@ -6,9 +6,11 @@ import Stepper from '../components/Stepper.jsx';
 
 const GROUPS = [
   ['any', 'Anyone'],
-  ['men', 'Men'],
-  ['women', 'Women'],
-  ['family', 'Family with children']
+  ['men', 'Man'],
+  ['women', 'Woman'],
+  ['women_children', 'Woman with children'],
+  ['family', 'Family with children'],
+  ['youth', 'Youth on their own']
 ];
 
 export default function Browse({ search, setSearch, coords, setCoords }) {

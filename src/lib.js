@@ -6,8 +6,28 @@ export const TYPE_LABEL = {
   community: 'Community host · verified'
 };
 
-const TAKES = { men: 'takes_men', women: 'takes_women', family: 'takes_family' };
-const GROUP_NOUN = { men: 'men', women: 'women', family: 'families' };
+// Search group -> the host flag that serves it. Men and women mean single adults.
+const TAKES = {
+  men: 'takes_men',
+  women: 'takes_women',
+  women_children: 'takes_women_children',
+  family: 'takes_families',
+  youth: 'takes_youth'
+};
+const GROUP_NOUN = {
+  men: 'men',
+  women: 'women',
+  women_children: 'women with children',
+  family: 'families',
+  youth: 'unaccompanied youth'
+};
+
+// A woman with children is a family, so a host that takes families takes her too.
+// It does not run the other way: a women-and-children host cannot take every family.
+export function takes(host, group) {
+  if (group === 'any') return true;
+  return !!host[TAKES[group]] || (group === 'women_children' && !!host.takes_families);
+}
 
 export const bedWord = (n) => (n === 1 ? 'bed' : 'beds');
 
@@ -15,14 +35,16 @@ export function takesText(host) {
   const out = [];
   if (host.takes_men) out.push('Men');
   if (host.takes_women) out.push('Women');
-  if (host.takes_family) out.push('Families');
+  if (host.takes_women_children) out.push('Women with children');
+  if (host.takes_families) out.push('Families');
+  if (host.takes_youth) out.push(host.youth_max_age ? 'Youth up to ' + host.youth_max_age : 'Youth');
   return out.join(', ');
 }
 
 // Why a host cannot take this search, or '' when it can.
 export function blockReason(host, search) {
   if (!host.accepting) return 'Not taking arrivals tonight';
-  if (search.group !== 'any' && !host[TAKES[search.group]]) return 'Does not take ' + GROUP_NOUN[search.group];
+  if (!takes(host, search.group)) return 'Does not take ' + GROUP_NOUN[search.group];
   if (search.stepFree && !host.step_free) return 'No step-free access';
   if (search.pets && !host.pets) return 'No pets';
   if (host.beds_available === 0) return 'Full';
@@ -33,7 +55,9 @@ export function blockReason(host, search) {
 export function describeWho({ group, people }) {
   if (group === 'men') return people + (people === 1 ? ' man' : ' men');
   if (group === 'women') return people + (people === 1 ? ' woman' : ' women');
+  if (group === 'women_children') return 'a woman with children (' + people + ' in all)';
   if (group === 'family') return 'a family of ' + people;
+  if (group === 'youth') return people + (people === 1 ? ' young person' : ' young people') + ' on their own';
   return people + (people === 1 ? ' person' : ' people');
 }
 
