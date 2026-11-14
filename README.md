@@ -14,22 +14,26 @@ real, but this project is not affiliated with or endorsed by them.
 
 ## Run it
 
-Needs Node 20 or newer and a running PostgreSQL server.
+Needs Node 20 or newer and Docker Compose (or a separately installed PostgreSQL server).
 
 ```bash
-npm install
+npm ci
 cp .env.example .env    # Windows: copy .env.example .env
+docker compose up -d db
 ```
 
-Put your PostgreSQL user and password in `.env` (`PGUSER`, `PGPASSWORD`), then:
+Wait for the database to report healthy with `docker compose ps`, then run:
 
 ```bash
 npm run dev
 ```
 
 Open http://localhost:5173. The API runs on port 3001 and Vite proxies `/api` to it. On first start
-the server creates the `shelterlink` database and its tables and seeds the demo hosts, so the PostgreSQL
-user needs permission to create a database (or create it yourself first and name it in `.env`).
+the server creates the database if needed, creates its tables, and seeds the demo hosts. Compose
+exposes PostgreSQL only on localhost and stores its data in the `postgres_data` volume. The sample
+credentials are for local development only. For a separately installed PostgreSQL server, update
+`PGHOST`, `PGPORT`, `PGUSER`, and `PGPASSWORD` in `.env`; the user needs permission to create a
+database.
 
 - `npm run reset-db` drops the tables and re-seeds them.
 - `npm run build && npm start` serves the built app and the API together on one port (3001, or `PORT`).
