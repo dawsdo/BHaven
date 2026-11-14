@@ -6,19 +6,20 @@ import Host from './pages/Host.jsx';
 
 export default function App() {
   // The search lives here so it survives moving between the list and a listing.
-  const [search, setSearch] = useState({ group: 'any', place: 'any', people: 1, stepFree: false, pets: false });
+  const [search, setSearch] = useState({ group: 'any', people: 1, stepFree: false, pets: false });
   const [coords, setCoords] = useState(null);
 
   return (
     <div className="app">
       <header className="topbar">
-        <div className="wordmark">ShelterLink BHM</div>
+        <div className="wordmark">BHaven</div>
         <nav className="topnav" aria-label="Main">
           <NavLink to="/" end>
             Find a place
           </NavLink>
           <NavLink to="/host">Host console</NavLink>
         </nav>
+        <div className="spacer" />
       </header>
 
       <Routes>

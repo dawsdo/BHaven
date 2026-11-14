@@ -1,4 +1,4 @@
--- ShelterLink BHM schema (PostgreSQL). Times are Unix milliseconds stored as BIGINT.
+-- BHaven schema (PostgreSQL). Times are Unix milliseconds stored as BIGINT.
 -- Nothing here identifies the person who needs a bed: a hold is a code and a head count.
 --
 -- The server only creates missing tables; it does not alter existing ones. After a change

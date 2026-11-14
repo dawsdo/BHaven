@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { KIND_LABEL, ago, clockTime, isStale, openSummary, unitWord, usePolling } from '../lib.js';
 import Stepper from '../components/Stepper.jsx';
 
-const TOKEN_KEY = 'shelterlink-staff';
+const TOKEN_KEY = 'bhaven-staff';
 const MAX_OPEN = 999;
 
 // The session token is kept in sessionStorage: it survives a reload and is gone when the tab closes.
