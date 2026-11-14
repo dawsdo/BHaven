@@ -107,15 +107,6 @@ button:disabled {
 .spacer {
   flex-grow: 1;
 }
-.demo-chip {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  color: #e4ecea;
-}
-
 /* Page */
 .page {
   flex-grow: 1;

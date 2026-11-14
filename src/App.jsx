@@ -20,7 +20,6 @@ export default function App() {
           <NavLink to="/host">Host console</NavLink>
         </nav>
         <div className="spacer" />
-        <div className="demo-chip">Demo data: bed counts and policies are placeholders</div>
       </header>
 
       <Routes>
