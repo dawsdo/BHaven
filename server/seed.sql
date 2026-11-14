@@ -2,20 +2,17 @@
 -- step-free and pet flags, and coordinates below are placeholders for the demo.
 -- Confirm everything with each organization before showing this as live data.
 
+WITH t AS (SELECT (EXTRACT(EPOCH FROM now()) * 1000)::BIGINT AS now_ms)
 INSERT INTO hosts
   (name, type, address, lat, lng, takes_men, takes_women, takes_family, step_free, pets, beds_open, accepting, verified, note, updated_at)
-VALUES
-  ('First Light', 'shelter', 'Downtown',
-    33.5185, -86.8050, 0, 1, 1, 1, 0, 4, 1, 1, '', UNIX_TIMESTAMP() * 1000 - 5 * 60000),
-  ('Firehouse Ministries', 'shelter', '626 2nd Ave N',
-    33.5120, -86.8230, 1, 0, 0, 1, 0, 9, 1, 1, '', UNIX_TIMESTAMP() * 1000 - 12 * 60000),
-  ('Jimmie Hale Mission Men''s Center', 'shelter', '3420 2nd Ave N',
-    33.5250, -86.7830, 1, 0, 0, 0, 0, 12, 1, 1, '', UNIX_TIMESTAMP() * 1000 - 200 * 60000),
-  ('Salvation Army Center of Hope', 'shelter', '2015 26th Ave N',
-    33.5440, -86.8170, 1, 1, 1, 1, 1, 7, 1, 1, '', UNIX_TIMESTAMP() * 1000 - 2 * 60000),
-  ('Pathways', 'shelter', 'Downtown',
-    33.5180, -86.8080, 0, 1, 1, 1, 0, 0, 1, 1, '', UNIX_TIMESTAMP() * 1000 - 40 * 60000),
-  ('Warming station (Jimmie Hale Mission)', 'warming', '1569 Cooper Hill Rd',
-    33.5560, -86.6900, 1, 1, 1, 1, 0, 0, 0, 1, 'Opens on freeze nights.', UNIX_TIMESTAMP() * 1000 - 60 * 60000),
-  ('Sample Community Host (demo)', 'community', '[ADDRESS]',
-    33.5070, -86.8000, 1, 1, 1, 1, 0, 6, 1, 1, 'Side entrance. Ring the bell.', UNIX_TIMESTAMP() * 1000 - 20 * 60000);
+SELECT v.name, v.type, v.address, v.lat, v.lng, v.takes_men, v.takes_women, v.takes_family,
+       v.step_free, v.pets, v.beds_open, v.accepting, TRUE, v.note, t.now_ms - v.mins_ago * 60000
+FROM t, (VALUES
+  ('First Light',                           'shelter',   'Downtown',            33.5185, -86.8050, FALSE, TRUE,  TRUE,  TRUE,  FALSE,  4, TRUE,  '',                              5),
+  ('Firehouse Ministries',                  'shelter',   '626 2nd Ave N',       33.5120, -86.8230, TRUE,  FALSE, FALSE, TRUE,  FALSE,  9, TRUE,  '',                             12),
+  ('Jimmie Hale Mission Men''s Center',     'shelter',   '3420 2nd Ave N',      33.5250, -86.7830, TRUE,  FALSE, FALSE, FALSE, FALSE, 12, TRUE,  '',                            200),
+  ('Salvation Army Center of Hope',         'shelter',   '2015 26th Ave N',     33.5440, -86.8170, TRUE,  TRUE,  TRUE,  TRUE,  TRUE,   7, TRUE,  '',                              2),
+  ('Pathways',                              'shelter',   'Downtown',            33.5180, -86.8080, FALSE, TRUE,  TRUE,  TRUE,  FALSE,  0, TRUE,  '',                             40),
+  ('Warming station (Jimmie Hale Mission)', 'warming',   '1569 Cooper Hill Rd', 33.5560, -86.6900, TRUE,  TRUE,  TRUE,  TRUE,  FALSE,  0, FALSE, 'Opens on freeze nights.',      60),
+  ('Sample Community Host (demo)',          'community', '[ADDRESS]',           33.5070, -86.8000, TRUE,  TRUE,  TRUE,  TRUE,  FALSE,  6, TRUE,  'Side entrance. Ring the bell.', 20)
+) AS v (name, type, address, lat, lng, takes_men, takes_women, takes_family, step_free, pets, beds_open, accepting, note, mins_ago);

@@ -10,25 +10,25 @@ real, but this project is not affiliated with or endorsed by them.
 
 - React 18 + Vite, plain CSS (`src/`)
 - Express API (`server/index.js`)
-- MySQL 8 through `mysql2` (`server/schema.sql`, `server/seed.sql`)
+- PostgreSQL through `pg` (`server/schema.sql`, `server/seed.sql`)
 
 ## Run it
 
-Needs Node 20 or newer and a running MySQL server.
+Needs Node 20 or newer and a running PostgreSQL server.
 
 ```bash
 npm install
 cp .env.example .env    # Windows: copy .env.example .env
 ```
 
-Put your MySQL user and password in `.env`, then:
+Put your PostgreSQL user and password in `.env` (`PGUSER`, `PGPASSWORD`), then:
 
 ```bash
 npm run dev
 ```
 
 Open http://localhost:5173. The API runs on port 3001 and Vite proxies `/api` to it. On first start
-the server creates the `shelterlink` database and its tables and seeds the demo hosts, so the MySQL
+the server creates the `shelterlink` database and its tables and seeds the demo hosts, so the PostgreSQL
 user needs permission to create a database (or create it yourself first and name it in `.env`).
 
 - `npm run reset-db` drops the tables and re-seeds them.

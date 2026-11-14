@@ -14,17 +14,18 @@ const route = (fn) => (req, res, next) => fn(req, res).catch(next);
 
 // Host ids in the URL must be whole numbers; anything else is a 404, not a database error.
 app.param('id', (req, res, next, id) => {
-  if (!/^\d+$/.test(id)) return res.status(404).json({ error: 'Host not found' });
+  if (!/^\d{1,9}$/.test(id)) return res.status(404).json({ error: 'Host not found' });
   next();
 });
 
-// Every host row comes back with how many beds are tied up in live holds.
+// Every host row comes back with how many beds are tied up in live holds ($1 is "now").
 const HOST_SQL = `
   SELECT h.*,
          (SELECT COALESCE(SUM(people), 0) FROM holds
-           WHERE host_id = h.id AND status = 'held' AND expires_at > ?) AS beds_held
+           WHERE host_id = h.id AND status = 'held' AND expires_at > $1) AS beds_held
     FROM hosts h`;
 
+// PostgreSQL returns BIGINT and SUM() as strings, so numbers are converted here.
 function shape(h) {
   const beds_held = Number(h.beds_held);
   return {
@@ -34,13 +35,13 @@ function shape(h) {
     address: h.address,
     lat: h.lat,
     lng: h.lng,
-    takes_men: !!h.takes_men,
-    takes_women: !!h.takes_women,
-    takes_family: !!h.takes_family,
-    step_free: !!h.step_free,
-    pets: !!h.pets,
-    accepting: !!h.accepting,
-    verified: !!h.verified,
+    takes_men: h.takes_men,
+    takes_women: h.takes_women,
+    takes_family: h.takes_family,
+    step_free: h.step_free,
+    pets: h.pets,
+    accepting: h.accepting,
+    verified: h.verified,
     note: h.note,
     beds_open: h.beds_open,
     beds_held,
@@ -49,17 +50,20 @@ function shape(h) {
   };
 }
 
-// `db` is the pool, or a single connection when inside a transaction.
+// `db` is the pool, or a single client when inside a transaction.
 async function findHost(db, id, { lock = false } = {}) {
-  const [rows] = await db.query(`${HOST_SQL} WHERE h.id = ?${lock ? ' FOR UPDATE' : ''}`, [Date.now(), id]);
+  // Take the row lock in its own statement first. The count below must run as a new
+  // statement so it sees holds committed while this request was waiting for the lock.
+  if (lock) await db.query('SELECT id FROM hosts WHERE id = $1 FOR UPDATE', [id]);
+  const { rows } = await db.query(`${HOST_SQL} WHERE h.id = $2`, [Date.now(), id]);
   return rows[0] ? shape(rows[0]) : null;
 }
 
 app.get(
   '/api/hosts',
   route(async (req, res) => {
-    const where = req.query.all === '1' ? '' : ' WHERE h.verified = 1';
-    const [rows] = await pool.query(`${HOST_SQL}${where} ORDER BY h.name`, [Date.now()]);
+    const where = req.query.all === '1' ? '' : ' WHERE h.verified';
+    const { rows } = await pool.query(`${HOST_SQL}${where} ORDER BY h.name`, [Date.now()]);
     res.json(rows.map(shape));
   })
 );
@@ -86,13 +90,13 @@ app.patch(
         return res.status(400).json({ error: 'beds_open must be a whole number from 0 to 500' });
       }
     }
-    const accepting = body.accepting === undefined ? null : body.accepting ? 1 : 0;
+    const accepting = body.accepting === undefined ? null : !!body.accepting;
     await pool.query(
       `UPDATE hosts
-          SET beds_open = COALESCE(?, beds_open),
-              accepting = COALESCE(?, accepting),
-              updated_at = ?
-        WHERE id = ?`,
+          SET beds_open = COALESCE($1::int, beds_open),
+              accepting = COALESCE($2::boolean, accepting),
+              updated_at = $3
+        WHERE id = $4`,
       [beds_open, accepting, Date.now(), id]
     );
     const host = await findHost(pool, id);
@@ -101,27 +105,27 @@ app.patch(
   })
 );
 
-// Runs `work` inside a transaction on one connection, rolling back if it throws.
+// Runs `work` inside a transaction on one client, rolling back if it throws.
 async function inTransaction(work) {
-  const conn = await pool.getConnection();
+  const client = await pool.connect();
   try {
-    await conn.beginTransaction();
-    const out = await work(conn);
-    await conn.commit();
+    await client.query('BEGIN');
+    const out = await work(client);
+    await client.query('COMMIT');
     return out;
   } catch (err) {
-    await conn.rollback();
+    await client.query('ROLLBACK');
     throw err;
   } finally {
-    conn.release();
+    client.release();
   }
 }
 
-async function newCode(conn) {
+async function newCode(client) {
   for (;;) {
     const code = 'BHM-' + String(Math.floor(1000 + Math.random() * 9000));
-    const [rows] = await conn.query('SELECT 1 FROM holds WHERE code = ?', [code]);
-    if (rows.length === 0) return code;
+    const found = await client.query('SELECT 1 FROM holds WHERE code = $1', [code]);
+    if (found.rowCount === 0) return code;
   }
 }
 
@@ -132,23 +136,26 @@ app.post(
     const host_id = Number(body.host_id);
     const people = Number(body.people);
     const minutes = HOLD_MINUTES.includes(Number(body.minutes)) ? Number(body.minutes) : 45;
+    if (!Number.isInteger(host_id) || host_id < 1) {
+      return res.status(404).json({ error: 'Host not found' });
+    }
     if (!Number.isInteger(people) || people < 1 || people > 9) {
       return res.status(400).json({ error: 'people must be a whole number from 1 to 9' });
     }
 
-    const out = await inTransaction(async (conn) => {
+    const out = await inTransaction(async (client) => {
       // Locking the host row makes two people holding the last bed take turns.
-      const host = await findHost(conn, host_id, { lock: true });
+      const host = await findHost(client, host_id, { lock: true });
       if (!host) return { status: 404, body: { error: 'Host not found' } };
       if (host.beds_available < people) {
         return { status: 409, body: { error: 'Not enough beds open', beds_available: host.beds_available } };
       }
       const now = Date.now();
-      const code = await newCode(conn);
+      const code = await newCode(client);
       const expires_at = now + minutes * 60000;
-      await conn.query(
+      await client.query(
         `INSERT INTO holds (host_id, code, people, status, created_at, expires_at)
-         VALUES (?, ?, ?, 'held', ?, ?)`,
+         VALUES ($1, $2, $3, 'held', $4, $5)`,
         [host_id, code, people, now, expires_at]
       );
       return { status: 201, body: { code, host_id, people, status: 'held', expires_at } };
@@ -160,9 +167,9 @@ app.post(
 app.get(
   '/api/hosts/:id/holds',
   route(async (req, res) => {
-    const [rows] = await pool.query(
+    const { rows } = await pool.query(
       `SELECT code, people, status, created_at, expires_at FROM holds
-        WHERE host_id = ? AND status = 'held' AND expires_at > ?
+        WHERE host_id = $1 AND status = 'held' AND expires_at > $2
         ORDER BY expires_at`,
       [Number(req.params.id), Date.now()]
     );
@@ -173,11 +180,11 @@ app.get(
 app.post(
   '/api/holds/:code/release',
   route(async (req, res) => {
-    const [rows] = await pool.query('SELECT code, status FROM holds WHERE code = ?', [req.params.code]);
+    const { rows } = await pool.query('SELECT code, status FROM holds WHERE code = $1', [req.params.code]);
     const hold = rows[0];
     if (!hold) return res.status(404).json({ error: 'Hold not found' });
     if (hold.status === 'held') {
-      await pool.query("UPDATE holds SET status = 'released' WHERE code = ? AND status = 'held'", [hold.code]);
+      await pool.query("UPDATE holds SET status = 'released' WHERE code = $1 AND status = 'held'", [hold.code]);
     }
     res.json({ code: hold.code, status: hold.status === 'held' ? 'released' : hold.status });
   })
@@ -187,14 +194,14 @@ app.post(
 app.post(
   '/api/holds/:code/arrive',
   route(async (req, res) => {
-    const out = await inTransaction(async (conn) => {
-      const [rows] = await conn.query('SELECT * FROM holds WHERE code = ? FOR UPDATE', [req.params.code]);
+    const out = await inTransaction(async (client) => {
+      const { rows } = await client.query('SELECT * FROM holds WHERE code = $1 FOR UPDATE', [req.params.code]);
       const hold = rows[0];
       if (!hold) return { status: 404, body: { error: 'Hold not found' } };
       if (hold.status !== 'held') return { status: 409, body: { error: 'Hold is already ' + hold.status } };
-      await conn.query("UPDATE holds SET status = 'arrived' WHERE id = ?", [hold.id]);
-      await conn.query(
-        'UPDATE hosts SET beds_open = GREATEST(0, beds_open - ?), updated_at = ? WHERE id = ?',
+      await client.query("UPDATE holds SET status = 'arrived' WHERE id = $1", [hold.id]);
+      await client.query(
+        'UPDATE hosts SET beds_open = GREATEST(0, beds_open - $1), updated_at = $2 WHERE id = $3',
         [hold.people, Date.now(), hold.host_id]
       );
       return { status: 200, body: { code: hold.code, status: 'arrived' } };
@@ -220,7 +227,7 @@ try {
   await initDb();
   app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
 } catch (err) {
-  console.error('\nCould not connect to MySQL:', err.message);
-  console.error('Check that MySQL is running and that .env has the right user and password.\n');
+  console.error('\nCould not connect to PostgreSQL:', err.code || '', err.message || '');
+  console.error('Check that PostgreSQL is running and that .env has the right user and password.\n');
   process.exit(1);
 }
